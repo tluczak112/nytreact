@@ -1,112 +1,89 @@
 import React, { Component } from "react";
-import { Col, Row, Container } from "../../components/Grid";
-import { List, ListItem } from "../../components/List";
-import { Input, FormBtn } from "../../components/Form";
-import API from "../../utils/API";
-import SaveBtn from "../../components/SaveBtn";
+import Container from '../../components/Container/Container';
+import SearchForm from '../../components/SearchForm/SearchForm';
+import Panel from '../../components/UI/Panel/Panel';
+import ArticleWell from '../../components/ArticleWell/ArticleWell';
+import nytAPI from "../../utils/nyt/API";
+import myAPI from "../../utils/api/API";
 
 class Search extends Component {
   state = {
-    articles: [],
-    topic: "",
-    startYear: "",
-    endYear: ""
-  };
+    labels: [
+      { id: "Topic", val: "" },
+      { id: "Start Year", val: "" },
+      { id: "End Year", val: "" }
+    ],
+    results: [],
+    showResults: false,
+    error: ""
+  }
 
-  searchArticles = (event) => {
+  handleInputChange = ( event, id ) => {
+    const labelIndex = this.state.labels.findIndex(label => label.id === id);
+    const label = { ...this.state.labels[labelIndex] };
+    label.val = event.target.value;
+    const labels = [ ...this.state.labels ];
+    labels[labelIndex] = label;
+    this.setState({ labels: labels });
+  }
+
+  handleFormSubmit = event => {
     event.preventDefault();
-    API.findArticles(this.state.topic, this.state.startYear, this.state.endYear)
-      .then(res => 
-          {
-          this.setState({articles: res.data.response.docs});
-          console.log(this.state.articles);
-        }
-        )
-        .catch( err => console.log(err));
-  };
-
-  saveArticleSubmit = (headline, link, date) => {
-    console.log("Working");
-      API.saveArticle({
-        headline: headline,
-        link: link,
-        date: date
+    nytAPI.getArticles(this.state.labels[0].val, this.state.labels[1].val, this.state.labels[2].val)
+      .then(res => {
+        this.setState({ 
+          labels: [
+            { id: "Title", val: "" },
+            { id: "Start Year", val: "" },
+            { id: "End Year", val: "" }
+          ],
+          results: res.data.response.docs,
+          showResults: true 
+        });
       })
-        .then(res => console.log("saved article"))
-        .catch(err => console.log(err));
-  };
+      .catch(err => this.setState({ error: err.message }));
+  } 
 
-  handleInputChange = event => {
-    const { name, value } = event.target;
-    this.setState({
-      [name]: value
-    });
-  };
+  handleArticleSaved = ( event, id ) => {
+    event.preventDefault();
+    const articleIndex = this.state.results.findIndex(result => result._id === id);
+    const article = { ...this.state.results[articleIndex] };
+    myAPI.saveArticle({
+      title: article.headline.main,
+      author: article.source,
+      summary: article.snippet,
+      dateOfArticle: article.pub_date,
+      URL: article.web_url
+    })
+      .then(res => alert('Article saved!'))
+      .catch(err => console.log(err));
+  }
 
   render() {
+    let searchResults = "Enter all fields to search posts.";
+    if (this.state.showResults) {
+      searchResults = this.state.results.map((article, index) => {
+        return <ArticleWell
+          key={article._id}
+          articleId={article._id}
+          headline={article.headline.main}
+          author={article.source}
+          date={article.pub_date}
+          URL={article.web_url}
+          summary={article.snippet}
+          action={this.handleArticleSaved}
+          title="Save this article" />
+      });
+    }
     return (
-      <Container fluid>
-        <Row>
-          <Col size="md-12">
-          <div className="panel panel-primary">
-          <div className="panel-heading"><h4>Query</h4></div>
-          <div className="panel-body"> 
-            <form>
-              <h4>Topic</h4>
-              <Input
-                value={this.state.title}
-                onChange={this.handleInputChange}
-                name="topic"
-              />
-              <h4>Start Year</h4>
-              <Input
-                value={this.state.author}
-                onChange={this.handleInputChange}
-                name="startYear"
-              />
-              <h4>End Year</h4>
-              <Input
-                value={this.state.author}
-                onChange={this.handleInputChange}
-                name="endYear"
-              />
-              <FormBtn
-                disabled={!(this.state.topic && this.state.startYear && this.state.endYear)}
-                onClick={this.searchArticles}
-              >
-                Submit
-              </FormBtn>
-            </form>
-            </div>
-            </div>
-          </Col>
-        </Row>
-        <Row>
-          <Col size="md-12">
-            {this.state.articles.length ? (
-              <div className="panel panel-primary">
-                <div className="panel-heading"><h4>Results</h4></div>
-                <div className="panel-body">
-                  <List>
-                    {this.state.articles.map(article => (
-                      <ListItem
-                        key={article._id}
-                        headline={article.headline.main}
-                        link={article.web_url}
-                        date={article.pub_date}
-                      >
-                        <SaveBtn onClick={() => this.saveArticleSubmit(article.headline.main, article.web_url, article.pub_date)} />
-                      </ListItem>))}
-                  </List>
-                </div>
-              </div>
-              ) : (
-              <ul className="list-group">
-                <li className="list-group-item"><h3>Enter Search Term to Begin</h3></li>
-              </ul>)
-            }
-          </Col>
-        </Row>
+      <Container>
+        <Panel title="Search for Articles">
+        <SearchForm 
+          submit={this.handleFormSubmit} 
+          changed={this.handleInputChange}
+          labels={this.state.labels} />
+        </Panel>
+        <Panel title="Top Results">{searchResults}</Panel>
       </Container>
     );
   }
